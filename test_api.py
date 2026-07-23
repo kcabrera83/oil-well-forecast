@@ -2,7 +2,8 @@ import sys
 sys.path.insert(0, '.')
 from app import app
 
-client = app.test_client()
+from fastapi.testclient import TestClient
+client = TestClient(app)
 tests = [
     ('GET', '/api/health', None),
     ('GET', '/api/dashboard', None),
@@ -13,7 +14,7 @@ tests = [
 for method, ep, body in tests:
     r = client.post(ep, json=body) if method == 'POST' else client.get(ep)
     status = "OK" if r.status_code == 200 else "FAIL"
-    result = r.get_json()
+    result = r.json()
     print(f"{ep}: {r.status_code} {status} {result.get('status', '')}")
     assert r.status_code == 200, f"FAILED: {ep} returned {r.status_code}"
 print("All 5 API tests passed!")

@@ -1,43 +1,88 @@
-"""Flask web server for the well forecast system."""
+"""FastAPI web server for the well forecast system."""
 
+import json
 import sys
 from pathlib import Path
+from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from flask import Flask, render_template, request, jsonify
 import numpy as np
+import pandas as pd
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 
-app = Flask(__name__)
+app = FastAPI(
+    title="Oil Well Forecast - Well Production Forecasting",
+    description="Well production forecasting with decline curve analysis and anomaly detection",
+    version="1.0.0",
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+models: dict[str, Any] = {}
 
 
-def _load_models():
+@app.on_event("startup")
+async def load_models():
     from oil_well_forecast.models.production_predictor import ProductionPredictor
     from oil_well_forecast.models.decline_analyzer import DeclineAnalyzer
-    model = ProductionPredictor.load("outputs/models/production_predictor.pkl")
-    analyzer = DeclineAnalyzer()
-    return model, analyzer
+    try:
+        models["predictor"] = ProductionPredictor.load("outputs/models/production_predictor.pkl")
+        models["analyzer"] = DeclineAnalyzer()
+    except Exception as e:
+        print(f"  Error loading models: {e}")
 
 
-_predictor = None
-_analyzer = None
+class PredictRequest(BaseModel):
+    depth: float = 3000.0
+    permeability: float = 100.0
+    porosity: float = 0.15
+    thickness: float = 30.0
+    initial_pressure: float = 300.0
+    oil_rate: float = 100.0
+    b_factor: float = 0.5
+    decline_rate: float = 0.05
+    water_cut: float = 0.1
+    cumulative_oil: float = 100000.0
+    flowing_bhp: float = 150.0
+    tubing_head: float = 40.0
+    choke: float = 16.0
+    pump_speed: float = 100.0
+    temperature: float = 100.0
+    month: float = 12.0
 
 
-def get_models():
-    global _predictor, _analyzer
-    if _predictor is None:
-        _predictor, _analyzer = _load_models()
-    return _predictor, _analyzer
+class ForecastRequest(BaseModel):
+    qi: float = 500.0
+    b_factor: float = 0.5
+    decline_rate: float = 0.05
+    months: int = 24
+    econ_limit: float = 10.0
 
 
-@app.route("/")
-def index():
-    return render_template("index.html")
+class AnomalyRequest(BaseModel):
+    oil_rate: float = 100.0
+    gas_rate: float = 500.0
+    water_rate: float = 20.0
+    gas_oil_ratio: float = 5000.0
+    bhp: float = 150.0
 
 
-@app.route("/api/dashboard")
-def api_dashboard():
-    import json
+@app.get("/api/health")
+async def health():
+    return {"status": "ok", "service": "oil-well-forecast"}
+
+
+@app.get("/api/dashboard")
+async def api_dashboard():
     report_path = Path("outputs/evaluation_report.json")
     if report_path.exists():
         with open(report_path) as f:
@@ -50,92 +95,73 @@ def api_dashboard():
             predictions = json.load(f)
     else:
         predictions = []
-    return jsonify({"report": report, "predictions": predictions})
+    return {"report": report, "predictions": predictions}
 
 
-@app.route("/api/predict", methods=["POST"])
-def api_predict():
+@app.post("/api/predict")
+async def api_predict(request: PredictRequest):
+    if "predictor" not in models:
+        raise HTTPException(status_code=503, detail="Model not loaded")
     try:
-        import pandas as pd
-        data = request.get_json()
         row = {
-            "depth_m": float(data.get("depth", 3000)),
-            "permeability_md": float(data.get("permeability", 100)),
-            "porosity": float(data.get("porosity", 0.15)),
-            "net_thickness_m": float(data.get("thickness", 30)),
-            "initial_pressure_psi": float(data.get("initial_pressure", 300)),
-            "initial_oil_rate_bbl_d": float(data.get("oil_rate", 100)),
-            "b_factor": float(data.get("b_factor", 0.5)),
-            "decline_rate": float(data.get("decline_rate", 0.05)),
-            "water_cut_init": float(data.get("water_cut", 0.1)),
-            "cumulative_oil_bbl": float(data.get("cumulative_oil", 100000)),
-            "flowing_bhp_psi": float(data.get("flowing_bhp", 150)),
-            "tubing_head_psi": float(data.get("tubing_head", 40)),
-            "choke_size_64": float(data.get("choke", 16)),
-            "pump_speed_spm": float(data.get("pump_speed", 100)),
-            "temperature_f": float(data.get("temperature", 100)),
-            "month": float(data.get("month", 12)),
+            "depth_m": request.depth,
+            "permeability_md": request.permeability,
+            "porosity": request.porosity,
+            "net_thickness_m": request.thickness,
+            "initial_pressure_psi": request.initial_pressure,
+            "initial_oil_rate_bbl_d": request.oil_rate,
+            "b_factor": request.b_factor,
+            "decline_rate": request.decline_rate,
+            "water_cut_init": request.water_cut,
+            "cumulative_oil_bbl": request.cumulative_oil,
+            "flowing_bhp_psi": request.flowing_bhp,
+            "tubing_head_psi": request.tubing_head,
+            "choke_size_64": request.choke,
+            "pump_speed_spm": request.pump_speed,
+            "temperature_f": request.temperature,
+            "month": request.month,
         }
         df = pd.DataFrame([row])
         from oil_well_forecast.utils.preprocessor import WellPreprocessor
         prep = WellPreprocessor()
         features = prep.extract_features(df)
-        predictor, _ = get_models()
-        prediction = predictor.predict(features)[0]
-        return jsonify({
+        prediction = models["predictor"].predict(features)[0]
+        return {
             "predicted_oil_rate": round(float(prediction), 2),
             "status": "success",
-        })
+        }
     except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 400
+        raise HTTPException(status_code=400, detail=str(e))
 
 
-@app.route("/api/well_forecast", methods=["POST"])
-def api_well_forecast():
+@app.post("/api/well_forecast")
+async def api_well_forecast(request: ForecastRequest):
+    if "analyzer" not in models:
+        raise HTTPException(status_code=503, detail="Analyzer not loaded")
     try:
-        data = request.get_json()
-        qi = float(data.get("qi", 500))
-        b = float(data.get("b_factor", 0.5))
-        di = float(data.get("decline_rate", 0.05))
-        months = int(data.get("months", 24))
-        econ_limit = float(data.get("econ_limit", 10))
-
-        _, analyzer = get_models()
-        forecast_rates = analyzer.forecast(qi, di, b, months)
-        eur = analyzer.estimate_eur(qi, di, b, econ_limit)
-
-        months_arr = list(range(1, months + 1))
-        rates_list = [round(float(r), 2) for r in forecast_rates]
-
-        return jsonify({
-            "months": months_arr,
-            "forecast_rates": rates_list,
+        analyzer = models["analyzer"]
+        forecast_rates = analyzer.forecast(request.qi, request.decline_rate, request.b_factor, request.months)
+        eur = analyzer.estimate_eur(request.qi, request.decline_rate, request.b_factor, request.econ_limit)
+        return {
+            "months": list(range(1, request.months + 1)),
+            "forecast_rates": [round(float(r), 2) for r in forecast_rates],
             "eur_bbl": round(float(eur), 0),
             "status": "success",
-        })
+        }
     except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 400
+        raise HTTPException(status_code=400, detail=str(e))
 
 
-@app.route("/api/anomaly_check", methods=["POST"])
-def api_anomaly_check():
+@app.post("/api/anomaly_check")
+async def api_anomaly_check(request: AnomalyRequest):
     try:
-        data = request.get_json()
-        features = [
-            float(data.get("oil_rate", 100)),
-            float(data.get("gas_rate", 500)),
-            float(data.get("water_rate", 20)),
-            float(data.get("gas_oil_ratio", 5000)),
-            float(data.get("bhp", 150)),
-        ]
         from oil_well_forecast.models.anomaly_detector import WellAnomalyDetector
-        import pandas as pd
         df = pd.DataFrame([{
-            "oil_rate_bbl_d": features[0],
-            "gas_rate_mcf_d": features[1],
-            "water_rate_bbl_d": features[2],
-            "gas_oil_ratio": features[3],
-            "flowing_bhp_psi": features[4],
+            "oil_rate_bbl_d": request.oil_rate,
+            "gas_rate_mcf_d": request.gas_rate,
+            "water_rate_bbl_d": request.water_rate,
+            "gas_oil_ratio": request.gas_oil_ratio,
+            "flowing_bhp_psi": request.bhp,
         }])
         detector = WellAnomalyDetector()
         detector.fit(pd.DataFrame({
@@ -147,36 +173,15 @@ def api_anomaly_check():
         }))
         _, scores = detector.predict(df)
         is_anomaly = scores[0] < -0.1
-
-        return jsonify({
+        return {
             "is_anomaly": bool(is_anomaly),
             "anomaly_score": round(float(scores[0]), 4),
             "status": "success",
-        })
-    except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 400
-
-
-@app.route("/api/health")
-def api_health():
-    return jsonify({"status": "ok", "service": "oil-well-forecast"})
-
-
-@app.route("/api/docs")
-def api_docs():
-    return jsonify({
-        "openapi": "3.0.0",
-        "info": {"title": "Oil Well Forecast - Well Forecast", "version": "1.0.0"},
-        "paths": {
-            "/": {"get": {"summary": "Main dashboard"}},
-            "/api/health": {"get": {"summary": "Service health check"}},
-            "/api/dashboard": {"get": {"summary": "Evaluation report and predictions"}},
-            "/api/predict": {"post": {"summary": "Predict well production rate"}},
-            "/api/well_forecast": {"post": {"summary": "Future production forecast with decline curve"}},
-            "/api/anomaly_check": {"post": {"summary": "Detect anomalies in well readings"}},
         }
-    })
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 if __name__ == "__main__":
-    app.run(debug=True, host="0.0.0.0", port=5002)
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=5002)
