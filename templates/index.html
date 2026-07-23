@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema de Pronostico de Produccion de Pozos</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Tahoma, sans-serif; background: #0f172a; color: #e2e8f0; }
+        .header { background: linear-gradient(135deg, #1e3a5f 0%, #0d9488 100%); padding: 20px 40px; display: flex; justify-content: space-between; align-items: center; }
+        .header h1 { font-size: 1.4rem; }
+        .header .subtitle { color: #94a3b8; font-size: 0.85rem; }
+        .status { display: flex; gap: 8px; align-items: center; }
+        .status .dot { width: 10px; height: 10px; border-radius: 50%; background: #22c55e; }
+        .container { max-width: 1400px; margin: 0 auto; padding: 24px; }
+        .tabs { display: flex; gap: 4px; margin-bottom: 24px; background: #1e293b; border-radius: 12px; padding: 4px; }
+        .tab { padding: 10px 20px; border-radius: 8px; cursor: pointer; font-size: 0.9rem; border: none; background: transparent; color: #94a3b8; }
+        .tab.active { background: #0d9488; color: white; font-weight: 600; }
+        .tab:hover:not(.active) { background: #334155; }
+        .panel { display: none; }
+        .panel.active { display: block; }
+        .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px; }
+        .card { background: #1e293b; border-radius: 12px; padding: 20px; border: 1px solid #334155; }
+        .card h3 { color: #94a3b8; font-size: 0.8rem; text-transform: uppercase; margin-bottom: 8px; }
+        .card .value { font-size: 1.8rem; font-weight: 700; color: #0d9488; }
+        .card .unit { color: #64748b; font-size: 0.75rem; margin-left: 4px; }
+        .form-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+        .form-group { display: flex; flex-direction: column; gap: 4px; }
+        .form-group label { color: #94a3b8; font-size: 0.8rem; text-transform: uppercase; }
+        .form-group input { background: #0f172a; border: 1px solid #334155; border-radius: 8px; padding: 10px; color: #e2e8f0; font-size: 0.95rem; }
+        .form-group input:focus { outline: none; border-color: #0d9488; }
+        .btn { background: #0d9488; color: white; border: none; border-radius: 8px; padding: 12px 28px; font-size: 0.95rem; cursor: pointer; font-weight: 600; margin-top: 12px; }
+        .btn:hover { background: #0f766e; }
+        .result-box { background: #0f172a; border: 1px solid #334155; border-radius: 12px; padding: 20px; margin-top: 16px; }
+        .result-box h3 { color: #0d9488; margin-bottom: 8px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 16px; }
+        th { background: #334155; padding: 10px; text-align: left; font-size: 0.8rem; text-transform: uppercase; color: #94a3b8; }
+        td { padding: 10px; border-bottom: 1px solid #1e293b; font-size: 0.9rem; }
+        tr:hover td { background: #1e293b; }
+        .chart-container { background: #1e293b; border-radius: 12px; padding: 20px; border: 1px solid #334155; margin-bottom: 16px; }
+        .chart-container h3 { color: #94a3b8; margin-bottom: 12px; font-size: 0.85rem; }
+        canvas { width: 100% !important; }
+        .badge { padding: 3px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: 600; }
+        .badge-green { background: #166534; color: #22c55e; }
+        .badge-yellow { background: #854d0e; color: #eab308; }
+        .badge-red { background: #991b1b; color: #ef4444; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div>
+            <h1>Pronostico de Produccion de Pozos</h1>
+            <div class="subtitle">ML para oil & gas - Decline Analysis & Forecasting</div>
+        </div>
+        <div class="status">
+            <div class="dot"></div>
+            <span>Operational</span>
+        </div>
+    </div>
+    <div class="container">
+        <div class="tabs">
+            <button class="tab active" onclick="showPanel('dashboard')">Dashboard</button>
+            <button class="tab" onclick="showPanel('predict')">Prediccion ML</button>
+            <button class="tab" onclick="showPanel('forecast')">Forecast Declinacion</button>
+            <button class="tab" onclick="showPanel('anomaly')">Anomalias</button>
+        </div>
+
+        <div id="dashboard" class="panel active">
+            <div class="grid" id="stats-grid"></div>
+            <div class="chart-container">
+                <h3>Predicciones por Pozo</h3>
+                <canvas id="predChart" height="80"></canvas>
+            </div>
+            <div class="card" style="margin-top:16px">
+                <h3>Tabla de Predicciones</h3>
+                <table id="predTable">
+                    <thead><tr><th>Pozo</th><th>Actual (bbl/d)</th><th>Predicho (bbl/d)</th><th>EUR (bbl)</th><th>Modelo</th></tr></thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+
+        <div id="predict" class="panel">
+            <div class="card">
+                <h3>Prediccion con Modelo ML</h3>
+                <div class="form-grid">
+                    <div class="form-group"><label>Profundidad (m)</label><input type="number" id="p_depth" value="3000"></div>
+                    <div class="form-group"><label>Permeabilidad (mD)</label><input type="number" id="p_perm" value="100"></div>
+                    <div class="form-group"><label>Porosidad</label><input type="number" id="p_poro" value="0.15" step="0.01"></div>
+                    <div class="form-group"><label>Espesor Neto (m)</label><input type="number" id="p_thick" value="30"></div>
+                    <div class="form-group"><label>Presion Inicial (psi)</label><input type="number" id="p_pres" value="300"></div>
+                    <div class="form-group"><label>Q Inicial (bbl/d)</label><input type="number" id="p_ip" value="500"></div>
+                    <div class="form-group"><label>B Factor</label><input type="number" id="p_b" value="0.5" step="0.1"></div>
+                    <div class="form-group"><label>Decline Rate</label><input type="number" id="p_di" value="0.05" step="0.01"></div>
+                    <div class="form-group"><label>Water Cut Init</label><input type="number" id="p_wc" value="0.1" step="0.05"></div>
+                    <div class="form-group"><label>Cumul. Oil (bbl)</label><input type="number" id="p_cum" value="100000"></div>
+                    <div class="form-group"><label>BHP Flujo (psi)</label><input type="number" id="p_bhp" value="150"></div>
+                    <div class="form-group"><label>Tubing Head (psi)</label><input type="number" id="p_thp" value="40"></div>
+                    <div class="form-group"><label>Choke (1/64)</label><input type="number" id="p_choke" value="16"></div>
+                    <div class="form-group"><label>Pump SPM</label><input type="number" id="p_pump" value="100"></div>
+                    <div class="form-group"><label>Temp (F)</label><input type="number" id="p_temp" value="100"></div>
+                    <div class="form-group"><label>Mes</label><input type="number" id="p_month" value="12"></div>
+                </div>
+                <button class="btn" onclick="runPrediction()">Predecir</button>
+                <div id="predResult" class="result-box" style="display:none"></div>
+            </div>
+        </div>
+
+        <div id="forecast" class="panel">
+            <div class="card">
+                <h3>Forecast por Declinacion (Arps)</h3>
+                <div class="form-grid">
+                    <div class="form-group"><label>Q Inicial (bbl/d)</label><input type="number" id="f_qi" value="500"></div>
+                    <div class="form-group"><label>B Factor</label><input type="number" id="f_b" value="0.5" step="0.1"></div>
+                    <div class="form-group"><label>Decline Rate</label><input type="number" id="f_di" value="0.05" step="0.01"></div>
+                    <div class="form-group"><label>Meses</label><input type="number" id="f_months" value="24"></div>
+                    <div class="form-group"><label>Limite Economico (bbl/d)</label><input type="number" id="f_econ" value="10"></div>
+                </div>
+                <button class="btn" onclick="runForecast()">Calcular Forecast</button>
+                <div id="forecastResult" class="result-box" style="display:none"></div>
+                <div class="chart-container" style="margin-top:16px;display:none" id="forecastChartBox">
+                    <canvas id="forecastChart" height="100"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <div id="anomaly" class="panel">
+            <div class="card">
+                <h3>Deteccion de Anomalias</h3>
+                <div class="form-grid">
+                    <div class="form-group"><label>Tasa Aceite (bbl/d)</label><input type="number" id="a_oil" value="150"></div>
+                    <div class="form-group"><label>Tasa Gas (mcf/d)</label><input type="number" id="a_gas" value="800"></div>
+                    <div class="form-group"><label>Tasa Agua (bbl/d)</label><input type="number" id="a_water" value="30"></div>
+                    <div class="form-group"><label>Gas-Oil Ratio</label><input type="number" id="a_gor" value="5000"></div>
+                    <div class="form-group"><label>BHP (psi)</label><input type="number" id="a_bhp" value="150"></div>
+                </div>
+                <button class="btn" onclick="runAnomalyCheck()">Verificar Anomalias</button>
+                <div id="anomalyResult" class="result-box" style="display:none"></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        function showPanel(id) {
+            document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.getElementById(id).classList.add('active');
+            event.target.classList.add('active');
+        }
+
+        async function loadDashboard() {
+            const res = await fetch('/api/dashboard');
+            const data = await res.json();
+            const report = data.report;
+            const preds = data.predictions;
+
+            const m = report.metrics || {};
+            document.getElementById('stats-grid').innerHTML = `
+                <div class="card"><h3>Mejor Modelo</h3><div class="value" style="font-size:1.2rem">${report.best_model || 'N/A'}</div></div>
+                <div class="card"><h3>R2 Score</h3><div class="value">${(m.R2 || 0).toFixed(4)}</div></div>
+                <div class="card"><h3>MAE (bbl/d)</h3><div class="value">${(m.MAE || 0).toFixed(2)}<span class="unit">bbl/d</span></div></div>
+                <div class="card"><h3>MAPE</h3><div class="value">${(m['MAPE_%'] || 0).toFixed(1)}<span class="unit">%</span></div></div>
+            `;
+
+            const tbody = document.querySelector('#predTable tbody');
+            tbody.innerHTML = preds.map(p => `<tr>
+                <td>${p.well_id}</td><td>${p.current_rate}</td><td>${p.predicted_next}</td>
+                <td>${p.estimated_eur_bbl.toLocaleString()}</td><td>${p.decline_model}</td>
+            </tr>`).join('');
+
+            if (preds.length > 0 && typeof Chart !== 'undefined') {
+                new Chart(document.getElementById('predChart'), {
+                    type: 'bar',
+                    data: {
+                        labels: preds.map(p => p.well_id),
+                        datasets: [
+                            { label: 'Actual', data: preds.map(p => p.current_rate), backgroundColor: '#3b82f6' },
+                            { label: 'Predicho', data: preds.map(p => p.predicted_next), backgroundColor: '#0d9488' }
+                        ]
+                    },
+                    options: { responsive: true, scales: { y: { beginAtZero: true, grid: { color: '#334155' } }, x: { grid: { color: '#334155' } } }, plugins: { legend: { labels: { color: '#94a3b8' } } } }
+                });
+            }
+        }
+
+        async function runPrediction() {
+            const body = {
+                depth: +document.getElementById('p_depth').value,
+                permeability: +document.getElementById('p_perm').value,
+                porosity: +document.getElementById('p_poro').value,
+                thickness: +document.getElementById('p_thick').value,
+                initial_pressure: +document.getElementById('p_pres').value,
+                oil_rate: +document.getElementById('p_ip').value,
+                b_factor: +document.getElementById('p_b').value,
+                decline_rate: +document.getElementById('p_di').value,
+                water_cut: +document.getElementById('p_wc').value,
+                cumulative_oil: +document.getElementById('p_cum').value,
+                flowing_bhp: +document.getElementById('p_bhp').value,
+                tubing_head: +document.getElementById('p_thp').value,
+                choke: +document.getElementById('p_choke').value,
+                pump_speed: +document.getElementById('p_pump').value,
+                temperature: +document.getElementById('p_temp').value,
+                month: +document.getElementById('p_month').value,
+            };
+            const res = await fetch('/api/predict', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body) });
+            const data = await res.json();
+            const box = document.getElementById('predResult');
+            box.style.display = 'block';
+            box.innerHTML = data.status === 'success'
+                ? `<h3>Resultado ML</h3><p style="font-size:1.5rem;font-weight:700;color:#0d9488">${data.predicted_oil_rate} bbl/d</p><p style="color:#94a3b8;margin-top:4px">Prediccion de tasa de aceite (barriles/dia)</p>`
+                : `<h3 style="color:#ef4444">Error</h3><p>${data.message}</p>`;
+        }
+
+        async function runForecast() {
+            const body = {
+                qi: +document.getElementById('f_qi').value,
+                b_factor: +document.getElementById('f_b').value,
+                decline_rate: +document.getElementById('f_di').value,
+                months: +document.getElementById('f_months').value,
+                econ_limit: +document.getElementById('f_econ').value,
+            };
+            const res = await fetch('/api/well_forecast', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body) });
+            const data = await res.json();
+            const box = document.getElementById('forecastResult');
+            box.style.display = 'block';
+            if (data.status === 'success') {
+                box.innerHTML = `<h3>Forecast</h3><p>EUR estimado: <strong>${data.eur_bbl.toLocaleString()}</strong> bbl</p><p style="color:#94a3b8;margin-top:4px">Pronostico por ${body.months} meses</p>`;
+                const chartBox = document.getElementById('forecastChartBox');
+                chartBox.style.display = 'block';
+                if (window._fcChart) window._fcChart.destroy();
+                window._fcChart = new Chart(document.getElementById('forecastChart'), {
+                    type: 'line',
+                    data: { labels: data.months, datasets: [{ label: 'Forecast (bbl/d)', data: data.forecast_rates, borderColor: '#0d9488', backgroundColor: 'rgba(13,148,136,0.1)', fill: true, tension: 0.3 }] },
+                    options: { responsive: true, scales: { y: { beginAtZero: true, grid: { color: '#334155' } }, x: { grid: { color: '#334155' } } }, plugins: { legend: { labels: { color: '#94a3b8' } } } }
+                });
+            } else {
+                box.innerHTML = `<h3 style="color:#ef4444">Error</h3><p>${data.message}</p>`;
+            }
+        }
+
+        async function runAnomalyCheck() {
+            const body = {
+                oil_rate: +document.getElementById('a_oil').value,
+                gas_rate: +document.getElementById('a_gas').value,
+                water_rate: +document.getElementById('a_water').value,
+                gas_oil_ratio: +document.getElementById('a_gor').value,
+                bhp: +document.getElementById('a_bhp').value,
+            };
+            const res = await fetch('/api/anomaly_check', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body) });
+            const data = await res.json();
+            const box = document.getElementById('anomalyResult');
+            box.style.display = 'block';
+            if (data.status === 'success') {
+                const cls = data.is_anomaly ? 'badge-red' : 'badge-green';
+                const label = data.is_anomaly ? 'ANOMALIA DETECTADA' : 'Normal';
+                box.innerHTML = `<h3>Resultado</h3><p><span class="badge ${cls}">${label}</span></p><p style="margin-top:8px">Score: ${data.anomaly_score} ${data.is_anomaly ? '(< -0.1)' : '(>= -0.1)'}</p>`;
+            } else {
+                box.innerHTML = `<h3 style="color:#ef4444">Error</h3><p>${data.message}</p>`;
+            }
+        }
+
+        loadDashboard();
+    </script>
+</body>
+</html>
