@@ -162,5 +162,21 @@ def api_health():
     return jsonify({"status": "ok", "service": "oil-well-forecast"})
 
 
+@app.route("/api/docs")
+def api_docs():
+    return jsonify({
+        "openapi": "3.0.0",
+        "info": {"title": "Oil Well Forecast - Pronostico de Pozos", "version": "1.0.0"},
+        "paths": {
+            "/": {"get": {"summary": "Dashboard principal"}},
+            "/api/health": {"get": {"summary": "Health check del servicio"}},
+            "/api/dashboard": {"get": {"summary": "Reporte de evaluacion y predicciones"}},
+            "/api/predict": {"post": {"summary": "Predecir tasa de produccion de un pozo"}},
+            "/api/well_forecast": {"post": {"summary": "Pronostico de produccion a futuro con curva de declive"}},
+            "/api/anomaly_check": {"post": {"summary": "Detectar anomalias en lecturas del pozo"}},
+        }
+    })
+
+
 if __name__ == "__main__":
     app.run(debug=True, host="0.0.0.0", port=5002)
