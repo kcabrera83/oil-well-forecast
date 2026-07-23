@@ -2,11 +2,15 @@
 
 import json
 import sys
+import warnings
 from pathlib import Path
 from typing import Any
 
+warnings.filterwarnings("ignore")
+
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+import joblib
 import numpy as np
 import pandas as pd
 from fastapi import FastAPI, HTTPException
@@ -16,8 +20,8 @@ from pydantic import BaseModel
 
 app = FastAPI(
     title="Oil Well Forecast - Well Production Forecasting",
-    description="Well production forecasting with decline curve analysis and anomaly detection",
-    version="1.0.0",
+    description="Well production forecasting with Prophet, ARIMA, and Holt-Winters",
+    version="2.0.0",
 )
 
 app.add_middleware(
@@ -35,32 +39,20 @@ models: dict[str, Any] = {}
 
 @app.on_event("startup")
 async def load_models():
-    from oil_well_forecast.models.production_predictor import ProductionPredictor
-    from oil_well_forecast.models.decline_analyzer import DeclineAnalyzer
     try:
-        models["predictor"] = ProductionPredictor.load("outputs/models/production_predictor.pkl")
-        models["analyzer"] = DeclineAnalyzer()
+        bundle = joblib.load("outputs/models/time_series_models.pkl")
+        models["prophet"] = bundle["models"]["prophet"]
+        models["arima"] = bundle["models"]["arima"]
+        models["holt_winters"] = bundle["models"]["holt_winters"]
+        models["production_series"] = bundle["production_series"]
     except Exception as e:
         print(f"  Error loading models: {e}")
 
 
 class PredictRequest(BaseModel):
-    depth: float = 3000.0
-    permeability: float = 100.0
-    porosity: float = 0.15
-    thickness: float = 30.0
-    initial_pressure: float = 300.0
-    oil_rate: float = 100.0
-    b_factor: float = 0.5
-    decline_rate: float = 0.05
-    water_cut: float = 0.1
-    cumulative_oil: float = 100000.0
-    flowing_bhp: float = 150.0
-    tubing_head: float = 40.0
-    choke: float = 16.0
-    pump_speed: float = 100.0
-    temperature: float = 100.0
-    month: float = 12.0
+    start_date: str = "2023-01-01"
+    periods: int = 365
+    model_name: str = "prophet"
 
 
 class ForecastRequest(BaseModel):
@@ -81,7 +73,7 @@ class AnomalyRequest(BaseModel):
 
 @app.get("/api/health")
 async def health():
-    return {"status": "ok", "service": "oil-well-forecast"}
+    return {"status": "ok", "service": "oil-well-forecast", "framework": "prophet+arima+statsmodels"}
 
 
 @app.get("/api/dashboard")
@@ -103,51 +95,82 @@ async def api_dashboard():
 
 @app.post("/api/predict")
 async def api_predict(request: PredictRequest):
-    if "predictor" not in models:
-        raise HTTPException(status_code=503, detail="Model not loaded")
+    if not models:
+        raise HTTPException(status_code=503, detail="Models not loaded")
     try:
-        row = {
-            "depth_m": request.depth,
-            "permeability_md": request.permeability,
-            "porosity": request.porosity,
-            "net_thickness_m": request.thickness,
-            "initial_pressure_psi": request.initial_pressure,
-            "initial_oil_rate_bbl_d": request.oil_rate,
-            "b_factor": request.b_factor,
-            "decline_rate": request.decline_rate,
-            "water_cut_init": request.water_cut,
-            "cumulative_oil_bbl": request.cumulative_oil,
-            "flowing_bhp_psi": request.flowing_bhp,
-            "tubing_head_psi": request.tubing_head,
-            "choke_size_64": request.choke,
-            "pump_speed_spm": request.pump_speed,
-            "temperature_f": request.temperature,
-            "month": request.month,
-        }
-        df = pd.DataFrame([row])
-        from oil_well_forecast.utils.preprocessor import WellPreprocessor
-        prep = WellPreprocessor()
-        features = prep.extract_features(df)
-        prediction = models["predictor"].predict(features)[0]
-        return {
-            "predicted_oil_rate": round(float(prediction), 2),
-            "status": "success",
-        }
+        model_name = request.model_name
+        if model_name not in models:
+            model_name = "prophet"
+
+        if model_name == "prophet":
+            future = pd.DataFrame({
+                "ds": pd.date_range(start=request.start_date, periods=request.periods, freq="D"),
+            })
+            forecast = models["prophet"].predict(future)
+            result_df = forecast[["ds", "yhat", "yhat_lower", "yhat_upper"]]
+            return {
+                "forecast": result_df.to_dict("records"),
+                "model_used": "prophet",
+                "status": "success",
+            }
+        elif model_name == "arima":
+            forecast_vals, conf_int = models["arima"].predict(
+                n_periods=request.periods, return_conf_int=True
+            )
+            dates = pd.date_range(start=request.start_date, periods=request.periods, freq="D")
+            return {
+                "forecast": [
+                    {
+                        "ds": str(d),
+                        "yhat": round(float(v), 2),
+                        "yhat_lower": round(float(lo), 2),
+                        "yhat_upper": round(float(hi), 2),
+                    }
+                    for d, v, lo, hi in zip(dates, forecast_vals, conf_int[:, 0], conf_int[:, 1])
+                ],
+                "model_used": "arima",
+                "status": "success",
+            }
+        elif model_name == "holt_winters":
+            forecast_vals = models["holt_winters"].forecast(request.periods)
+            dates = pd.date_range(start=request.start_date, periods=request.periods, freq="D")
+            return {
+                "forecast": [
+                    {"ds": str(d), "yhat": round(float(v), 2)}
+                    for d, v in zip(dates, forecast_vals)
+                ],
+                "model_used": "holt_winters",
+                "status": "success",
+            }
+        else:
+            raise HTTPException(status_code=400, detail=f"Unknown model: {model_name}")
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
 @app.post("/api/well_forecast")
 async def api_well_forecast(request: ForecastRequest):
-    if "analyzer" not in models:
-        raise HTTPException(status_code=503, detail="Analyzer not loaded")
     try:
-        analyzer = models["analyzer"]
-        forecast_rates = analyzer.forecast(request.qi, request.decline_rate, request.b_factor, request.months)
-        eur = analyzer.estimate_eur(request.qi, request.decline_rate, request.b_factor, request.econ_limit)
+        qi = request.qi
+        di = request.decline_rate
+        b = request.b_factor
+        months = request.months
+        rates = []
+        for t in range(1, months + 1):
+            if abs(b - 1.0) < 1e-9:
+                q = qi * np.exp(-di * t)
+            elif abs(b) < 1e-9:
+                q = qi * np.exp(-di * t)
+            else:
+                q = qi / (1 + b * di * t) ** (1.0 / b)
+            rates.append(max(q, 0))
+
+        eur = sum(rates)
         return {
-            "months": list(range(1, request.months + 1)),
-            "forecast_rates": [round(float(r), 2) for r in forecast_rates],
+            "months": list(range(1, months + 1)),
+            "forecast_rates": [round(float(r), 2) for r in rates],
             "eur_bbl": round(float(eur), 0),
             "status": "success",
         }
@@ -188,4 +211,3 @@ async def api_anomaly_check(request: AnomalyRequest):
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=5002)
-

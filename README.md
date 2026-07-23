@@ -1,6 +1,6 @@
 # Oil Well Production Forecast
 
-Oil well production forecasting system based on Machine Learning. Integrates regression models, curved decline analysis (Arps), anomaly detection, and an interactive web dashboard with Flask.
+Oil well production forecasting system based on Time Series analysis. Integrates Facebook Prophet, ARIMA (pmdarima), Holt-Winters exponential smoothing, decline curve analysis (Arps), anomaly detection, and an interactive web dashboard with FastAPI.
 
 ---
 
@@ -34,19 +34,26 @@ oil-well-forecast/
 
 ---
 
-## ML Models
+## Tech Stack
 
-| Model | R2 | MAE (bbl/d) | MAPE (%) |
-|-------|-----|-------------|----------|
-| ExtraTrees | 0.9902 | 20.14 | 4.94 |
-| GradientBoosting | 0.9891 | 21.09 | 5.58 |
-| RandomForest | 0.9878 | 22.49 | 5.81 |
-| MLP | 0.9289 | 58.63 | 20.50 |
-| Ridge | 0.8275 | 97.20 | 55.30 |
-| SVR | 0.5624 | 147.87 | 59.72 |
-| ElasticNet | 0.7451 | 124.54 | 65.43 |
+| Component | Technology |
+|-----------|-----------|
+| Time Series Framework | **Facebook Prophet** (≥1.1) |
+| ARIMA Models | **pmdarima** (≥2.0) — auto_arima |
+| Exponential Smoothing | **statsmodels** (≥0.14) — Holt-Winters |
+| Data Processing | pandas, numpy, joblib |
+| Visualization | matplotlib, seaborn |
+| Web Server | FastAPI + uvicorn |
+| Monitoring | prometheus-fastapi-instrumentator |
+| Validation | pydantic v2 |
 
-**Best model:** ExtraTrees with R2=0.9902 and MAPE=4.94% (cross-validation R2=0.9905 +/- 0.0005)
+## Time Series Models
+
+| Model | Type | Seasonality |
+|-------|------|-------------|
+| Prophet | Additive trend + yearly seasonality | Automatic changepoints |
+| ARIMA (auto_arima) | Seasonal ARIMA(12) | Stepwise auto-selection |
+| Holt-Winters | Exponential Smoothing | 12-period seasonal, additive |
 
 ---
 
