@@ -46,7 +46,18 @@ async def load_models():
         models["holt_winters"] = bundle["models"]["holt_winters"]
         models["production_series"] = bundle["production_series"]
     except Exception as e:
-        print(f"  Error loading models: {e}")
+        print(f"  Error loading time series models: {e}")
+
+    try:
+        from oil_well_forecast.models.anomaly_detector import WellAnomalyDetector
+        from oil_well_forecast.data_generator import WellDataGenerator
+        gen = WellDataGenerator(seed=42)
+        hist_df = gen.generate(n_wells=200, n_months=36)
+        detector = WellAnomalyDetector()
+        detector.fit(hist_df)
+        models["anomaly_detector"] = detector
+    except Exception as e:
+        print(f"  Error loading anomaly detector: {e}")
 
 
 class PredictRequest(BaseModel):
@@ -160,14 +171,14 @@ async def api_well_forecast(request: ForecastRequest):
         rates = []
         for t in range(1, months + 1):
             if abs(b - 1.0) < 1e-9:
-                q = qi * np.exp(-di * t)
+                q = qi / (1 + di * t)
             elif abs(b) < 1e-9:
                 q = qi * np.exp(-di * t)
             else:
                 q = qi / (1 + b * di * t) ** (1.0 / b)
             rates.append(max(q, 0))
 
-        eur = sum(rates)
+        eur = sum(rates) * 30
         return {
             "months": list(range(1, months + 1)),
             "forecast_rates": [round(float(r), 2) for r in rates],
@@ -181,7 +192,9 @@ async def api_well_forecast(request: ForecastRequest):
 @app.post("/api/anomaly_check")
 async def api_anomaly_check(request: AnomalyRequest):
     try:
-        from oil_well_forecast.models.anomaly_detector import WellAnomalyDetector
+        detector = models.get("anomaly_detector")
+        if detector is None:
+            raise HTTPException(status_code=503, detail="Anomaly detector not loaded")
         df = pd.DataFrame([{
             "oil_rate_bbl_d": request.oil_rate,
             "gas_rate_mcf_d": request.gas_rate,
@@ -189,14 +202,6 @@ async def api_anomaly_check(request: AnomalyRequest):
             "gas_oil_ratio": request.gas_oil_ratio,
             "flowing_bhp_psi": request.bhp,
         }])
-        detector = WellAnomalyDetector()
-        detector.fit(pd.DataFrame({
-            "oil_rate_bbl_d": np.random.uniform(10, 500, 100),
-            "gas_rate_mcf_d": np.random.uniform(100, 5000, 100),
-            "water_rate_bbl_d": np.random.uniform(5, 200, 100),
-            "gas_oil_ratio": np.random.uniform(100, 3000, 100),
-            "flowing_bhp_psi": np.random.uniform(50, 300, 100),
-        }))
         _, scores = detector.predict(df)
         is_anomaly = scores[0] < -0.1
         return {
@@ -204,6 +209,8 @@ async def api_anomaly_check(request: AnomalyRequest):
             "anomaly_score": round(float(scores[0]), 4),
             "status": "success",
         }
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 

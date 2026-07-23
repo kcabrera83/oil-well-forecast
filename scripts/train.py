@@ -83,7 +83,7 @@ def main():
     print("  Plots generados en outputs/plots/")
 
     print("\n  Entrenando modelos de series de tiempo...")
-    production_col = "initial_oil_rate_bbl_d"
+    production_col = "oil_rate_bbl_d"
     if production_col not in df.columns:
         production_col = df.select_dtypes(include=[np.number]).columns[0]
     production_series = df.groupby("month")[production_col].mean().sort_index()
