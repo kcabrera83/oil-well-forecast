@@ -1,4 +1,4 @@
-"""Servidor web Flask para el sistema de pronostico de pozos."""
+"""Flask web server for the well forecast system."""
 
 import sys
 from pathlib import Path
@@ -166,14 +166,14 @@ def api_health():
 def api_docs():
     return jsonify({
         "openapi": "3.0.0",
-        "info": {"title": "Oil Well Forecast - Pronostico de Pozos", "version": "1.0.0"},
+        "info": {"title": "Oil Well Forecast - Well Forecast", "version": "1.0.0"},
         "paths": {
-            "/": {"get": {"summary": "Dashboard principal"}},
-            "/api/health": {"get": {"summary": "Health check del servicio"}},
-            "/api/dashboard": {"get": {"summary": "Reporte de evaluacion y predicciones"}},
-            "/api/predict": {"post": {"summary": "Predecir tasa de produccion de un pozo"}},
-            "/api/well_forecast": {"post": {"summary": "Pronostico de produccion a futuro con curva de declive"}},
-            "/api/anomaly_check": {"post": {"summary": "Detectar anomalias en lecturas del pozo"}},
+            "/": {"get": {"summary": "Main dashboard"}},
+            "/api/health": {"get": {"summary": "Service health check"}},
+            "/api/dashboard": {"get": {"summary": "Evaluation report and predictions"}},
+            "/api/predict": {"post": {"summary": "Predict well production rate"}},
+            "/api/well_forecast": {"post": {"summary": "Future production forecast with decline curve"}},
+            "/api/anomaly_check": {"post": {"summary": "Detect anomalies in well readings"}},
         }
     })
 
