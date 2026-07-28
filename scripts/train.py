@@ -136,5 +136,5 @@ def main():
     return best_name, evaluator
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()

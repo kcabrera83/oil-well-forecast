@@ -158,7 +158,7 @@ class WellDataGenerator:
         return filepath
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     gen = WellDataGenerator(seed=2024)
     df = gen.generate(n_wells=200, n_months=36)
     path = gen.save(df, path="data/well_production.csv")
