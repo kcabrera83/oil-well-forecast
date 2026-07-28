@@ -5,7 +5,7 @@ import sys
 import json
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+import sys; sys.path.append(str(Path(__file__).resolve().parent))
 
 from oil_well_forecast.data_generator import WellDataGenerator
 from oil_well_forecast.utils.preprocessor import WellPreprocessor
@@ -14,11 +14,9 @@ from oil_well_forecast.models.decline_analyzer import DeclineAnalyzer
 
 
 def main():
-    print("=" * 60)
-    print("  PREDICCION - Sistema de Pronostico de Produccion")
-    print("=" * 60)
+    pass
 
-    gen = WellDataGenerator(seed=99)
+    gen = WellDataGenerator(seed=55)
     df = gen.generate(n_wells=10, n_months=24)
 
     last_records = df.groupby("well_id").tail(6)
@@ -61,7 +59,7 @@ def main():
     with open(output_path, "w") as f:
         json.dump(predictions, f, indent=2)
     print(f"\n  Predicciones guardadas en {output_path}")
-    print("  Prediccion completada exitosamente!")
+    pass
     return predictions
 
 

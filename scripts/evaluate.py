@@ -5,7 +5,7 @@ import sys
 import json
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+import sys; sys.path.append(str(Path(__file__).resolve().parent))
 
 from oil_well_forecast.data_generator import WellDataGenerator
 from oil_well_forecast.utils.preprocessor import WellPreprocessor
@@ -18,11 +18,9 @@ import numpy as np
 
 
 def main():
-    print("=" * 60)
-    print("  EVALUACION - Sistema de Pronostico de Produccion")
-    print("=" * 60)
+    pass
 
-    gen = WellDataGenerator(seed=42)
+    gen = WellDataGenerator(seed=2024)
     df = gen.generate(n_wells=200, n_months=36)
 
     prep = WellPreprocessor()
@@ -85,7 +83,7 @@ def main():
     with open(output_path, "w") as f:
         json.dump(eval_report, f, indent=2)
     print(f"\n  Reporte guardado en {output_path}")
-    print("  Evaluacion completada exitosamente!")
+    pass
     return evaluator
 
 

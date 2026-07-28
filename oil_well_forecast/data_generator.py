@@ -1,5 +1,3 @@
-"""Generador de datos sinteticos de produccion de pozos petroliferos."""
-
 import numpy as np
 import pandas as pd
 from pathlib import Path
@@ -20,7 +18,7 @@ class WellDataGenerator:
 
     WELL_STATUS = ["activo", "productivo", "bombeo", "cerrado"]
 
-    def __init__(self, seed=42):
+    def __init__(self, seed=2024):
         self.rng = np.random.default_rng(seed)
 
     def generate(self, n_wells=200, n_months=36):
@@ -161,7 +159,7 @@ class WellDataGenerator:
 
 
 if __name__ == "__main__":
-    gen = WellDataGenerator(seed=42)
+    gen = WellDataGenerator(seed=2024)
     df = gen.generate(n_wells=200, n_months=36)
     path = gen.save(df, path="data/well_production.csv")
     print(f"Dataset generado: {len(df)} registros de {df['well_id'].nunique()} pozos")

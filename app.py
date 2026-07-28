@@ -1,5 +1,3 @@
-"""FastAPI web server for the well forecast system."""
-
 import json
 import sys
 import warnings
@@ -8,7 +6,7 @@ from typing import Any
 
 warnings.filterwarnings("ignore")
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+import sys; sys.path.append(str(Path(__file__).resolve().parent))
 
 import joblib
 import numpy as np
@@ -21,7 +19,7 @@ from pydantic import BaseModel
 app = FastAPI(
     title="Oil Well Forecast - Well Production Forecasting",
     description="Well production forecasting with Prophet, ARIMA, and Holt-Winters",
-    version="2.0.0",
+    version="0.1",
 )
 
 app.add_middleware(
@@ -51,7 +49,7 @@ async def load_models():
     try:
         from oil_well_forecast.models.anomaly_detector import WellAnomalyDetector
         from oil_well_forecast.data_generator import WellDataGenerator
-        gen = WellDataGenerator(seed=42)
+        gen = WellDataGenerator(seed=2024)
         hist_df = gen.generate(n_wells=200, n_months=36)
         detector = WellAnomalyDetector()
         detector.fit(hist_df)

@@ -7,7 +7,7 @@ from pathlib import Path
 
 warnings.filterwarnings("ignore")
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+import sys; sys.path.append(str(Path(__file__).resolve().parent))
 
 import joblib
 import numpy as np
@@ -62,11 +62,9 @@ def train_holt_winters(production_series: pd.Series):
 
 
 def main():
-    print("=" * 60)
-    print("  ENTRENAMIENTO - Sistema de Pronostico de Produccion")
-    print("=" * 60)
+    pass
 
-    gen = WellDataGenerator(seed=42)
+    gen = WellDataGenerator(seed=2024)
     df = gen.generate(n_wells=200, n_months=36)
     gen.save(df)
     print(f"  Datos generados: {len(df)} registros, {df['well_id'].nunique()} pozos")
@@ -80,7 +78,7 @@ def main():
     viz.plot_decline_analysis(df)
     viz.plot_correlation(df)
     viz.plot_well_map(df)
-    print("  Plots generados en outputs/plots/")
+    pass
 
     print("\n  Entrenando modelos de series de tiempo...")
     production_col = "oil_rate_bbl_d"
@@ -91,15 +89,15 @@ def main():
     models = {}
     print("\n  [1/3] Entrenando Prophet...")
     models["prophet"] = train_prophet(production_series)
-    print("        Prophet entrenado")
+    pass
 
-    print("  [2/3] Entrenando ARIMA (auto_arima)...")
+    pass
     models["arima"] = train_arima(production_series)
-    print("        ARIMA entrenado")
+    pass
 
-    print("  [3/3] Entrenando Holt-Winters...")
+    pass
     models["holt_winters"] = train_holt_winters(production_series)
-    print("        Holt-Winters entrenado")
+    pass
 
     print("\n  Evaluando modelos...")
     evaluator = ForecastEvaluator()
@@ -132,7 +130,7 @@ def main():
         "production_series": production_series,
     }, "outputs/models/time_series_models.pkl")
     print(f"\n  Mejor modelo: {best_name}")
-    print("  Modelos guardados en outputs/models/time_series_models.pkl")
+    pass
 
     print("\n  Entrenamiento completado exitosamente!")
     return best_name, evaluator
