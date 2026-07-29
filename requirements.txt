@@ -12,3 +12,10 @@ prophet>=1.1.0
 pmdarima>=2.0.0
 statsmodels>=0.14.0
 prometheus-fastapi-instrumentator>=6.1.0
+
+# Streamlit dashboard deps
+streamlit>=1.28
+scikit-learn>=1.3,<1.7
+plotly>=5.18
+matplotlib>=3.8
+joblib>=1.3
