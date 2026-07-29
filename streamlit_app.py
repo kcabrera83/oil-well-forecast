@@ -1,5 +1,6 @@
 import streamlit as st
 import pickle
+import joblib
 import numpy as np
 import sys
 from pathlib import Path
@@ -12,7 +13,7 @@ st.markdown("Forecast oil well production and estimate EUR.")
 @st.cache_resource
 def load_models():
     d = Path(__file__).parent / "outputs" / "models"
-    return {k: pickle.load(open(d / v, "rb")) for k, v in [("production", "production_forecaster.pkl"), ("decline", "decline_curve_model.pkl"), ("eur", "eur_estimator.pkl")]}
+    return {k: joblib.load(d / v) for k, v in [("production", "production_forecaster.pkl"), ("decline", "decline_curve_model.pkl"), ("eur", "eur_estimator.pkl")]}
 
 models = load_models()
 
