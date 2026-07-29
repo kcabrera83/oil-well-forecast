@@ -1,52 +1,52 @@
-import streamlit as st, joblib, numpy as np, matplotlib.pyplot as plt
-from pathlib import Path; import sys; sys.path.insert(0, str(Path(__file__).parent))
 
-st.set_page_config(page_title="Oil Well Forecast", layout="centered")
+import streamlit as st
+import numpy as np
+from pydantic import BaseModel, Field
+from typing import Dict, Any
+import joblib, os
+
+st.set_page_config(page_title="Oil Well Forecast", page_icon=":bar_chart:", layout="wide")
 st.title("Oil Well Forecast")
 
-path = Path(__file__).parent / 'outputs' / 'models'
-models = {}
-models['rate'] = joblib.load(path / 'production_forecaster.pkl')
-models['eur'] = joblib.load(path / 'eur_estimator.pkl')
+class Payload(BaseModel):
+    features: Dict[str, float] = Field(default_factory=dict)
 
-def pipeline(x):
-    out = {}
-    m = models['rate']
-    if isinstance(m, dict):
-        p = m['model'].predict(m['scaler'].transform(x))
-        out['rate'] = m['label_encoder'].inverse_transform(p)[0] if 'label_encoder' in m else float(p[0])
-    else:
-        out['rate'] = float(m.predict(x)[0])
-    m = models['eur']
-    if isinstance(m, dict):
-        p = m['model'].predict(m['scaler'].transform(x))
-        out['eur'] = m['label_encoder'].inverse_transform(p)[0] if 'label_encoder' in m else float(p[0])
-    else:
-        out['eur'] = float(m.predict(x)[0])
-    return out
+class InferenceEngine:
+    def __init__(self):
+        self._models: Dict[str, Any] = {}
+        self._load()
+    
+    def _load(self):
+        for f in os.listdir("outputs/models"):
+            if f.endswith(".pkl"):
+                data = joblib.load(os.path.join("outputs/models", f))
+                self._models[f.replace(".pkl", "")] = data
+    
+    def predict(self, model_key: str, features: dict) -> float:
+        data = self._models.get(model_key)
+        if not data:
+            raise ValueError(f"Model {model_key} not found")
+        feats = data.get("feature_names", list(features.keys()))
+        X = np.array([features.get(f, 0) for f in feats]).reshape(1, -1)
+        if data.get("scaler"):
+            X = data["scaler"].transform(X)
+        return data["model"].predict(X)[0]
 
-with st.form('inputs'):
-    st.subheader('Input Parameters')
-    cols = st.columns(2)
-    depth = cols[0].slider('Depth', 1000, 15000, 8000)
-    perm = cols[1].slider('Perm', 0, 1000, 500)
-    poro = cols[0].slider('Poro', 5, 35, 20)
-    pres = cols[1].slider('Pres', 1000, 10000, 5500)
-    bhp = cols[0].slider('Bhp', 500, 5000, 2750)
-    thp = cols[1].slider('Thp', 100, 2000, 1050)
-    choke = cols[0].slider('Choke', 0, 3, 1)
-    rpm = cols[1].slider('Rpm', 0, 5000, 2500)
-    wcut = cols[0].slider('Wcut', 0, 100, 50)
-    gor = cols[1].slider('Gor', 0, 10000, 5000)
-    api = cols[0].slider('Api', 10, 50, 30)
-    visc = cols[1].slider('Visc', 0, 100, 50)
-    submitted = st.form_submit_button('Run', type='primary', use_container_width=True)
+engine = InferenceEngine()
 
-if submitted:
-    results = pipeline(np.array([[depth, perm, poro, pres, bhp, thp, choke, rpm, wcut, gor, api, visc]]))
+with st.sidebar:
+    st.header("Model Selection")
+    model_key = st.selectbox("Choose model", list(engine._models.keys()) or ["default"])
     st.divider()
-    st.subheader('Results')
-    mc = st.columns(len(results))
-    for i, (k, v) in enumerate(results.items()):
-        val = str(v) if isinstance(v, str) else f'{v:,.2f}'
-        mc[i].metric(k.replace('_',' ').title(), val)
+    st.caption("Production decline curve analysis and EUR estimation")
+
+data = engine._models.get(model_key, {})
+feats = data.get("feature_names", [f"f{i}" for i in range(4)])
+cols = st.columns(3)
+inputs = {}
+for i, f in enumerate(feats):
+    with cols[i % 3]:
+        inputs[f] = st.number_input(f.replace("_", " ").title(), value=0.0, key=f)
+if st.button("Run inference", type="primary"):
+    result = engine.predict(model_key, inputs)
+    st.metric("Prediction", f"{result:.4f}")

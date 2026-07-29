@@ -21,3 +21,6 @@ Thumbs.db
 !outputs/models/
 !outputs/models/*.pkl
 
+
+# Security & MLflow
+mlflow.db
